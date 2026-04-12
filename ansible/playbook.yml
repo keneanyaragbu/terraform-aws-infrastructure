@@ -1,0 +1,32 @@
+---
+# Main Ansible Playbook
+# Author: Anyaragbu Kenechukwu
+# Description: Configure production AWS EC2 app servers
+
+- name: Configure App Servers
+  hosts: app_servers
+  become: yes
+  gather_facts: yes
+
+  vars_files:
+    - group_vars/all.yml
+
+  roles:
+    - security
+    - nodejs
+    - nginx
+    - monitoring
+
+  post_tasks:
+    - name: Verify app is running
+      uri:
+        url: "http://localhost:{{ app_port }}"
+        return_content: yes
+        status_code: 200
+      register: app_response
+      retries: 3
+      delay: 5
+
+    - name: Display app response
+      debug:
+        msg: "App is running! Response: {{ app_response.status }}"

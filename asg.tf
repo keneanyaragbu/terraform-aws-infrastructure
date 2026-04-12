@@ -65,7 +65,18 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
     AutoScalingGroupName = aws_autoscaling_group.app.name
   }
 
-  alarm_actions = [aws_autoscaling_policy.scale_up.arn]
+  alarm_actions = [
+    aws_autoscaling_policy.scale_up.arn,
+    aws_sns_topic.alerts.arn
+  ]
+
+  ok_actions = [
+    aws_sns_topic.alerts.arn
+  ]
+
+  tags = {
+    Name = "${var.project_name}-cpu-high-alarm"
+  }
 }
 
 # CloudWatch Alarm — Low CPU Scale Down
@@ -84,5 +95,41 @@ resource "aws_cloudwatch_metric_alarm" "cpu_low" {
     AutoScalingGroupName = aws_autoscaling_group.app.name
   }
 
-  alarm_actions = [aws_autoscaling_policy.scale_down.arn]
+  alarm_actions = [
+    aws_autoscaling_policy.scale_down.arn,
+    aws_sns_topic.alerts.arn
+  ]
+
+  ok_actions = [
+    aws_sns_topic.alerts.arn
+  ]
+
+  tags = {
+    Name = "${var.project_name}-cpu-low-alarm"
+  }
+}
+
+# ALB Unhealthy Hosts Alarm
+resource "aws_cloudwatch_metric_alarm" "unhealthy_hosts" {
+  alarm_name          = "${var.project_name}-unhealthy-hosts"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 0
+  alarm_description   = "Alert when any target becomes unhealthy"
+
+  dimensions = {
+    LoadBalancer = aws_lb.main.arn_suffix
+    TargetGroup  = aws_lb_target_group.app.arn_suffix
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "${var.project_name}-unhealthy-hosts-alarm"
+  }
 }

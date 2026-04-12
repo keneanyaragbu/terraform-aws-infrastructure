@@ -63,3 +63,15 @@ variable "ami_id" {
   type        = string
   default     = "ami-0ea87431b78a82070"
 }
+
+variable "alert_email" {
+  description = "Email address for alerts"
+  type        = string
+  default     = "kenechukwuanyaragbu@gmail.com"
+}
+
+variable "alert_phone" {
+  description = "Phone number for SMS alerts"
+  type        = string
+  default     = "+16232606351"
+}

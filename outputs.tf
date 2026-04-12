@@ -53,3 +53,8 @@ output "nat_gateway_ip" {
   description = "NAT Gateway Public IP"
   value       = aws_eip.nat.public_ip
 }
+
+output "sns_topic_arn" {
+  description = "SNS Topic ARN for alerts"
+  value       = aws_sns_topic.alerts.arn
+}

@@ -1,0 +1,59 @@
+---
+# Node.js installation and app deployment
+
+- name: Install Node.js repository
+  shell: |
+    curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
+  args:
+    creates: /etc/yum.repos.d/nodesource-el9.repo
+
+- name: Install Node.js
+  yum:
+    name: nodejs
+    state: present
+
+- name: Verify Node.js installation
+  command: node --version
+  register: node_version_output
+  changed_when: false
+
+- name: Display Node.js version
+  debug:
+    msg: "Node.js version: {{ node_version_output.stdout }}"
+
+- name: Create app directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+
+- name: Deploy Node.js application
+  copy:
+    src: server.js
+    dest: "{{ app_dir }}/server.js"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0644'
+
+- name: Install PM2 process manager
+  npm:
+    name: pm2
+    global: yes
+    state: present
+
+- name: Start app with PM2
+  become_user: "{{ app_user }}"
+  shell: |
+    cd {{ app_dir }}
+    pm2 start server.js --name "myapp"
+    pm2 save
+  args:
+    creates: /home/{{ app_user }}/.pm2/dump.pm2
+
+- name: Configure PM2 startup
+  shell: |
+    pm2 startup systemd -u {{ app_user }} --hp /home/{{ app_user }}
+  register: pm2_startup
+  changed_when: pm2_startup.rc == 0

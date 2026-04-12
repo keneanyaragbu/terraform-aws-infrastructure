@@ -1,0 +1,12 @@
+---
+# Global variables for all hosts
+app_user: appuser
+app_dir: /home/appuser/app
+app_port: 3000
+node_version: "18"
+nginx_port: 80
+
+# Project info
+project_name: my-production
+domain_name: kaydev.online
+author: "Anyaragbu Kenechukwu"

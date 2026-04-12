@@ -1,0 +1,28 @@
+---
+# Nginx reverse proxy configuration
+
+- name: Install Nginx
+  yum:
+    name: nginx
+    state: present
+
+- name: Deploy Nginx configuration
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart nginx
+
+- name: Start and enable Nginx
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+
+handlers:
+  - name: restart nginx
+    service:
+      name: nginx
+      state: restarted
