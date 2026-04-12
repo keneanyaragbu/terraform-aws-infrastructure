@@ -32,9 +32,3 @@ resource "aws_route53_record" "www" {
     evaluate_target_health = true
   }
 }
-
-# Output nameservers to update GoDaddy
-output "nameservers" {
-  value       = aws_route53_zone.main.name_servers
-  description = "Update these nameservers in GoDaddy"
-}
