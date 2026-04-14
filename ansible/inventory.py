@@ -10,28 +10,31 @@ import subprocess
 import sys
 import os
 
+
 def get_terraform_outputs():
     """Get outputs from Terraform state"""
     try:
-        # Change to terraform directory
         terraform_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
+
         result = subprocess.run(
             ['terraform', 'output', '-json'],
             capture_output=True,
             text=True,
             cwd=terraform_dir
         )
-        
+
         if result.returncode != 0:
             print(f"Error getting Terraform outputs: {result.stderr}", file=sys.stderr)
             sys.exit(1)
-            
+
+        print("DEBUG - Terraform output:", result.stdout, file=sys.stderr)
+
         return json.loads(result.stdout)
-    
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 def get_app_server_ips(bastion_ip):
     """Get private IPs of app servers via AWS CLI"""
@@ -39,7 +42,6 @@ def get_app_server_ips(bastion_ip):
         result = subprocess.run([
             'aws', 'ec2', 'describe-instances',
             '--filters',
-            'Name=tag:Name,Values=my-production-app-server',
             'Name=instance-state-name,Values=running',
             '--query',
             'Reservations[].Instances[].PrivateIpAddress',
@@ -51,14 +53,20 @@ def get_app_server_ips(bastion_ip):
         )
         
         if result.returncode != 0:
-            print(f"Error getting app server IPs: {result.stderr}", file=sys.stderr)
+            print(f"Error getting app server IPs: {result.stderr}", 
+                  file=sys.stderr)
             sys.exit(1)
-            
-        return json.loads(result.stdout)
+        
+        ips = json.loads(result.stdout)
+        # Filter out bastion IP
+        private_ips = [ip for ip in ips if not ip.startswith('10.0.1')]
+        print(f"DEBUG - Parsed IPs: {private_ips}", file=sys.stderr)
+        return private_ips
     
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 def generate_inventory():
     """Generate Ansible inventory from Terraform outputs"""
@@ -73,36 +81,23 @@ def generate_inventory():
     # Get app server IPs
     app_server_ips = get_app_server_ips(bastion_ip)
     
-    # Generate inventory
-    inventory = {
-        "all": {
-            "children": {
-                "bastion": {},
-                "app_servers": {}
-            }
-        },
-        "bastion": {
-            "hosts": {
-                "bastion_host": {
-                    "ansible_host": bastion_ip,
-                    "ansible_user": "ec2-user",
-                    "ansible_ssh_private_key_file": key_path,
-                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=no"
-                }
-            }
-        },
-        "app_servers": {
-            "hosts": {}
-        },
-        "_meta": {
-            "hostvars": {}
-        }
+    # Build hostvars
+    hostvars = {}
+    app_server_hosts = {}
+    
+    # Bastion host vars
+    hostvars['bastion_host'] = {
+        "ansible_host": bastion_ip,
+        "ansible_user": "ec2-user",
+        "ansible_ssh_private_key_file": key_path,
+        "ansible_ssh_common_args": "-o StrictHostKeyChecking=no"
     }
     
-    # Add app servers
+    # App server host vars
     for i, ip in enumerate(app_server_ips, 1):
         host_name = f"app_server_{i}"
-        inventory["app_servers"]["hosts"][host_name] = {
+        app_server_hosts[host_name] = {}
+        hostvars[host_name] = {
             "ansible_host": ip,
             "ansible_user": "ec2-user",
             "ansible_ssh_private_key_file": key_path,
@@ -112,11 +107,25 @@ def generate_inventory():
                 f"-o StrictHostKeyChecking=no ec2-user@{bastion_ip}'"
             )
         }
-        inventory["_meta"]["hostvars"][host_name] = {
-            "ansible_host": ip
+    
+    # Generate final inventory
+    inventory = {
+        "_meta": {
+            "hostvars": hostvars
+        },
+        "all": {
+            "children": ["bastion", "app_servers"]
+        },
+        "bastion": {
+            "hosts": ["bastion_host"]
+        },
+        "app_servers": {
+            "hosts": list(app_server_hosts.keys())
         }
+    }
     
     return inventory
+
 
 if __name__ == '__main__':
     inventory = generate_inventory()

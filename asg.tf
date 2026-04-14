@@ -2,7 +2,7 @@
 resource "aws_autoscaling_group" "app" {
   name                = "${var.project_name}-asg"
   desired_capacity    = 2
-  min_size            = 1
+  min_size            = 2
   max_size            = 4
   target_group_arns   = [aws_lb_target_group.app.arn]
   vpc_zone_identifier = [

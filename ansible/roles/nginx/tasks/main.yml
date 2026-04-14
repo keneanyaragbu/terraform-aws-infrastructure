@@ -21,8 +21,3 @@
     state: started
     enabled: yes
 
-handlers:
-  - name: restart nginx
-    service:
-      name: nginx
-      state: restarted
