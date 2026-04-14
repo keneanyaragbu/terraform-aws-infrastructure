@@ -9,7 +9,7 @@
     create_home: yes
 
 - name: Install firewalld
-  yum:
+  dnf:
     name: firewalld
     state: present
 

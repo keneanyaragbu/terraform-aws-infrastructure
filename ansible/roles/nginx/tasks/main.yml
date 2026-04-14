@@ -2,7 +2,7 @@
 # Nginx reverse proxy configuration
 
 - name: Install Nginx
-  yum:
+  dnf:
     name: nginx
     state: present
 

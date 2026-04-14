@@ -8,7 +8,7 @@
     creates: /etc/yum.repos.d/nodesource-el9.repo
 
 - name: Install Node.js
-  yum:
+  dnf:
     name: nodejs
     state: present
 
