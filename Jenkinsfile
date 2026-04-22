@@ -32,5 +32,13 @@ pipeline {
                 }
             }
         }
+
+        stage('Destroy Infrastructure') {
+            steps {
+                 sh '''
+                 terraform destroy -auto-approve
+                 '''
+            }
+        }
     }
 }
