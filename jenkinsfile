@@ -1,0 +1,36 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        AWX_URL = 'http://<your-awx>'
+        INVENTORY_ID = '12'
+        JOB_TEMPLATE_ID = '34'
+    }
+
+    stages {
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'pip3 install requests'
+            }
+        }
+
+        stage('Terraform') {
+            steps {
+                sh '''
+                terraform init
+                terraform apply -auto-approve
+                '''
+            }
+        }
+
+        stage('AWX Deploy') {
+            steps {
+                withCredentials([string(credentialsId: 'awx-token', variable: 'AWX_TOKEN')]) {
+                    sh 'python3 scripts/jenkins_awx_deploy.py'
+                }
+            }
+        }
+    }
+}
