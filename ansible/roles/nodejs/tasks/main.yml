@@ -1,27 +1,47 @@
 ---
-# Node.js installation and app deployment
+- name: Install Node.js prerequisites
+  apt:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg
+    state: present
+    update_cache: yes
 
-- name: Install Node.js repository
+- name: Create NodeSource keyring directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Add NodeSource GPG key
   shell: |
-    curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
   args:
-    creates: /etc/yum.repos.d/nodesource-el9.repo
+    creates: /etc/apt/keyrings/nodesource.gpg
+
+- name: Add NodeSource repository
+  copy:
+    dest: /etc/apt/sources.list.d/nodesource.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_{{ node_version }}.x nodistro main
+    mode: '0644'
 
 - name: Install Node.js
-  dnf:
+  apt:
     name: nodejs
     state: present
+    update_cache: yes
 
-- name: Verify Node.js installation
-  command: node --version
-  register: node_version_output
-  changed_when: false
+- name: Create application user
+  user:
+    name: "{{ app_user }}"
+    shell: /bin/bash
+    create_home: yes
+    state: present
 
-- name: Display Node.js version
-  debug:
-    msg: "Node.js version: {{ node_version_output.stdout }}"
-
-- name: Create app directory
+- name: Create application directory
   file:
     path: "{{ app_dir }}"
     state: directory
@@ -29,7 +49,7 @@
     group: "{{ app_user }}"
     mode: '0755'
 
-- name: Deploy Node.js application
+- name: Copy application file
   copy:
     src: server.js
     dest: "{{ app_dir }}/server.js"
@@ -37,23 +57,49 @@
     group: "{{ app_user }}"
     mode: '0644'
 
-- name: Install PM2 process manager
-  npm:
-    name: pm2
-    global: yes
-    state: present
+- name: Check if PM2 is installed
+  command: which pm2
+  register: pm2_check
+  failed_when: false
+  changed_when: false
 
-- name: Start app with PM2
+- name: Install PM2 globally
+  command: npm install -g pm2
+  when: pm2_check.rc != 0
+
+- name: Check if app is already managed by PM2
+  command: pm2 describe {{ project_name }}
+  register: pm2_app_check
+  failed_when: false
+  changed_when: false
   become_user: "{{ app_user }}"
-  shell: |
-    cd {{ app_dir }}
-    pm2 start server.js --name "myapp"
-    pm2 save
-  args:
-    creates: /home/{{ app_user }}/.pm2/dump.pm2
+
+- name: Start Node.js app with PM2
+  command: pm2 start {{ app_dir }}/server.js --name {{ project_name }}
+  become_user: "{{ app_user }}"
+  environment:
+    PORT: "{{ app_port }}"
+  when: pm2_app_check.rc != 0
+
+- name: Restart app with PM2 if already present
+  command: pm2 restart {{ project_name }}
+  become_user: "{{ app_user }}"
+  environment:
+    PORT: "{{ app_port }}"
+  when: pm2_app_check.rc == 0
+
+- name: Save PM2 process list
+  command: pm2 save
+  become_user: "{{ app_user }}"
 
 - name: Configure PM2 startup
   shell: |
     pm2 startup systemd -u {{ app_user }} --hp /home/{{ app_user }}
-  register: pm2_startup
-  changed_when: pm2_startup.rc == 0
+  args:
+    creates: /etc/systemd/system/pm2-{{ app_user }}.service
+
+- name: Enable PM2 systemd service
+  systemd:
+    name: "pm2-{{ app_user }}"
+    enabled: yes
+    state: started
