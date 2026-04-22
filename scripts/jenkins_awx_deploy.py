@@ -2,8 +2,9 @@ import os
 import json
 import subprocess
 import requests
+import sys
 
-AWX_URL = os.environ['AWX_URL']
+AWX_URL = os.environ['AWX_URL'].rstrip("/")
 AWX_TOKEN = os.environ['AWX_TOKEN']
 INVENTORY_ID = os.environ['INVENTORY_ID']
 JOB_TEMPLATE_ID = os.environ['JOB_TEMPLATE_ID']
@@ -14,7 +15,38 @@ HEADERS = {
 }
 
 def run(cmd):
-    return subprocess.check_output(cmd, shell=True).decode()
+    return subprocess.check_output(cmd, shell=True, text=True)
+
+def awx_get(path):
+    url = f"{AWX_URL}{path}"
+    r = requests.get(url, headers=HEADERS, timeout=30)
+    print(f"GET {url} -> {r.status_code}")
+    print(r.text)
+    r.raise_for_status()
+    return r.json()
+
+def awx_post(path, payload=None):
+    url = f"{AWX_URL}{path}"
+    r = requests.post(url, headers=HEADERS, json=payload or {}, timeout=30)
+    print(f"POST {url} -> {r.status_code}")
+    print(r.text)
+    r.raise_for_status()
+    return r.json()
+
+def awx_delete(path):
+    url = f"{AWX_URL}{path}"
+    r = requests.delete(url, headers=HEADERS, timeout=30)
+    print(f"DELETE {url} -> {r.status_code}")
+    print(r.text)
+    r.raise_for_status()
+
+def awx_patch(path, payload):
+    url = f"{AWX_URL}{path}"
+    r = requests.patch(url, headers=HEADERS, json=payload, timeout=30)
+    print(f"PATCH {url} -> {r.status_code}")
+    print(r.text)
+    r.raise_for_status()
+    return r.json()
 
 # 1. Get terraform outputs
 run("terraform output -json > tf.json")
@@ -34,33 +66,41 @@ aws ec2 describe-instances \
 
 print("EC2 IPs:", ips)
 
-# 3. Clear AWX hosts
-hosts = requests.get(f"{AWX_URL}/api/v2/inventories/{INVENTORY_ID}/hosts/", headers=HEADERS).json()
+# 3. Fetch inventory hosts safely
+hosts_resp = awx_get(f"/api/v2/inventories/{INVENTORY_ID}/hosts/")
 
-for h in hosts['results']:
-    requests.delete(f"{AWX_URL}/api/v2/hosts/{h['id']}/", headers=HEADERS)
+if "results" not in hosts_resp:
+    print("Unexpected AWX response for inventory hosts endpoint")
+    sys.exit(1)
+
+for h in hosts_resp["results"]:
+    awx_delete(f"/api/v2/hosts/{h['id']}/")
 
 # 4. Ensure group exists
-groups = requests.get(f"{AWX_URL}/api/v2/inventories/{INVENTORY_ID}/groups/", headers=HEADERS).json()
-group_id = None
+groups_resp = awx_get(f"/api/v2/inventories/{INVENTORY_ID}/groups/")
 
-for g in groups['results']:
-    if g['name'] == "app_servers":
-        group_id = g['id']
+if "results" not in groups_resp:
+    print("Unexpected AWX response for inventory groups endpoint")
+    sys.exit(1)
+
+group_id = None
+for g in groups_resp["results"]:
+    if g["name"] == "app_servers":
+        group_id = g["id"]
+        break
 
 if not group_id:
-    r = requests.post(f"{AWX_URL}/api/v2/inventories/{INVENTORY_ID}/groups/",
-                      headers=HEADERS,
-                      json={"name": "app_servers"})
-    group_id = r.json()['id']
+    new_group = awx_post(
+        f"/api/v2/inventories/{INVENTORY_ID}/groups/",
+        {"name": "app_servers"}
+    )
+    group_id = new_group["id"]
 
-# 5. Update inventory vars (bastion SSH)
-requests.patch(
-    f"{AWX_URL}/api/v2/inventories/{INVENTORY_ID}/",
-    headers=HEADERS,
-    json={
-        "variables": f"""
-ansible_user: ubuntu
+# 5. Update inventory vars
+awx_patch(
+    f"/api/v2/inventories/{INVENTORY_ID}/",
+    {
+        "variables": f"""ansible_user: ubuntu
 ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o ProxyCommand="ssh -o StrictHostKeyChecking=no -W %h:%p -q ubuntu@{bastion_ip}"'
 """
     }
@@ -68,26 +108,30 @@ ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o ProxyCommand="ssh -o St
 
 # 6. Add hosts
 for ip in ips:
-    r = requests.post(
-        f"{AWX_URL}/api/v2/hosts/",
-        headers=HEADERS,
-        json={"name": ip, "inventory": int(INVENTORY_ID)}
+    host = awx_post(
+        "/api/v2/hosts/",
+        {"name": ip, "inventory": int(INVENTORY_ID)}
     )
-    host_id = r.json()['id']
+    host_id = host["id"]
 
-    requests.post(
-        f"{AWX_URL}/api/v2/groups/{group_id}/hosts/",
-        headers=HEADERS,
-        json={"id": host_id}
+    awx_post(
+        f"/api/v2/groups/{group_id}/hosts/",
+        {"id": host_id}
     )
 
 print("AWX inventory updated")
 
 # 7. Launch job
-r = requests.post(
-    f"{AWX_URL}/api/v2/job_templates/{JOB_TEMPLATE_ID}/launch/",
-    headers=HEADERS
+launch = awx_post(
+    f"/api/v2/job_templates/{JOB_TEMPLATE_ID}/launch/",
+    {}
 )
 
-job_id = r.json()['job']
+print("Launch response:", launch)
+
+job_id = launch.get("job")
+if not job_id:
+    print("No job ID returned from launch response")
+    sys.exit(1)
+
 print("Launched job:", job_id)
