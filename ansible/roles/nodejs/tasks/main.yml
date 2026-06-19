@@ -4,7 +4,6 @@
 - name: Install Node.js prerequisites
   yum:
     name:
-      - curl
       - ca-certificates
     state: present
 
