@@ -124,7 +124,7 @@ if not group_id:
 print(f"Using group_id: {group_id}")
 
 # 5. Update inventory vars
-inventory_vars = f"""ansible_user: ubuntu
+inventory_vars = f"""ansible_user: ec2-user
 ansible_host_key_checking: false
 ansible_ssh_common_args: '-o ForwardAgent=yes -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ProxyCommand="ssh -o ForwardAgent=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p ec2-user@{bastion_ip}"'
 """
