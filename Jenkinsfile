@@ -11,7 +11,7 @@ pipeline {
 
     environment {
         AWS_REGION = 'us-east-1'
-        AWX_URL = 'http://3.90.20.153:30701'
+        AWX_URL = 'http://3.81.36.235:30701'
         INVENTORY_ID = '3'
         JOB_TEMPLATE_ID = '11'
     }
