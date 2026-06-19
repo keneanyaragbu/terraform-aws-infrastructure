@@ -11,7 +11,13 @@ resource "aws_security_group" "bastion" {
     protocol    = "tcp"
     cidr_blocks = ["${chomp(data.http.my_ip.response_body)}/32"]
   }
-
+   ingress {
+    description = "SSH from AWX server"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["3.81.36.235/32"]
+  }
   egress {
     from_port   = 0
     to_port     = 0
