@@ -76,14 +76,19 @@
   command: pm2 save
   become_user: "{{ app_user }}"
 
-- name: Configure PM2 startup
-  shell: |
-    pm2 startup systemd -u {{ app_user }} --hp /home/{{ app_user }}
+- name: Get PM2 startup command
+  command: pm2 startup systemd -u {{ app_user }} --hp /home/{{ app_user }}
+  register: pm2_startup
+  changed_when: false
+
+- name: Execute PM2 startup command
+  shell: "{{ pm2_startup.stdout_lines[-1] }}"
+  when: pm2_startup.stdout_lines | length > 0
   args:
     creates: /etc/systemd/system/pm2-{{ app_user }}.service
 
-- name: Enable PM2 systemd service
+- name: Reload systemd and enable PM2 service
   systemd:
     name: "pm2-{{ app_user }}"
     enabled: yes
-    state: started
+    daemon_reload: yes
