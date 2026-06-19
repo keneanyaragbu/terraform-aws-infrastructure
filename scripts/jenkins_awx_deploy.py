@@ -125,7 +125,7 @@ print(f"Using group_id: {group_id}")
 
 # 5. Update inventory vars
 inventory_vars = f"""ansible_user: ubuntu
-ansible_ssh_common_args: '-o StrictHostKeyChecking=no -J ubuntu@{bastion_ip}'
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -J ubuntu@{bastion_ip}'
 """
 
 awx_patch(
